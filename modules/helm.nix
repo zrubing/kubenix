@@ -24,6 +24,21 @@ with lib; let
         else head splitted;
       version = last splitted;
     };
+
+  matchesResource = object: matcher:
+    let
+      objectApiVersion = object.apiVersion or "";
+      objectKind = object.kind or "";
+      objectName = object.metadata.name or "";
+      objectNamespace = object.metadata.namespace or "";
+    in
+    (matcher.apiVersion == null || matcher.apiVersion == objectApiVersion)
+    && (matcher.kind == null || matcher.kind == objectKind)
+    && (matcher.name == null || matcher.name == objectName)
+    && (matcher.namespace == null || matcher.namespace == objectNamespace);
+
+  matchedResourcePatches = object: resourceOverrides:
+    map (override: override.patch) (filter (override: matchesResource object override.match) resourceOverrides);
 in
 {
   imports = [ ./k8s.nix ];
@@ -65,6 +80,46 @@ in
           overrides = mkOption {
             description = "Overrides to apply to all chart resources";
             type = types.listOf types.unspecified;
+            default = [ ];
+          };
+
+          resourceOverrides = mkOption {
+            description = ''
+              Overrides to apply only to matching chart resources.
+              Matching fields are optional; omitted fields match any value.
+            '';
+            type = types.listOf (types.submodule {
+              options = {
+                match = {
+                  apiVersion = mkOption {
+                    description = "Match object apiVersion";
+                    type = types.nullOr types.str;
+                    default = null;
+                  };
+                  kind = mkOption {
+                    description = "Match object kind";
+                    type = types.nullOr types.str;
+                    default = null;
+                  };
+                  name = mkOption {
+                    description = "Match object metadata.name";
+                    type = types.nullOr types.str;
+                    default = null;
+                  };
+                  namespace = mkOption {
+                    description = "Match object metadata.namespace";
+                    type = types.nullOr types.str;
+                    default = null;
+                  };
+                };
+
+                patch = mkOption {
+                  description = "Patch merged into each matched object";
+                  type = types.unspecified;
+                  default = { };
+                };
+              };
+            });
             default = [ ];
           };
 
@@ -149,6 +204,7 @@ in
             "${apiVersion.group}"."${apiVersion.version}".${object.kind}."${name}" = mkMerge ([
               object
             ]
+            ++ matchedResourcePatches object release.resourceOverrides
             ++ release.overrides);
           })
         release.objects

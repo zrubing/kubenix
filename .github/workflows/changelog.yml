@@ -1,0 +1,59 @@
+name: changelog
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths:
+      - CHANGELOG.md
+
+env:
+  BYPASS_MESSAGE: A changelog entry is not necessary.
+
+jobs:
+  entry:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1, 2025-12-02
+        with:
+          fetch-depth: 0
+
+      - name: Check for a CHANGELOG.md entry
+        run: |
+          base="${{ github.event.pull_request.base.ref }}"
+
+          if git diff --name-only "origin/$base...HEAD" | grep -qx "CHANGELOG.md"; then
+            echo "✅ CHANGELOG.md was modified"
+            exit 0
+          fi
+
+          if git log "origin/$base..HEAD" --grep="$BYPASS_MESSAGE" --oneline | grep -q .; then
+            echo "✅ $BYPASS_MESSAGE"
+            exit 0
+          fi
+
+          echo "❌ No CHANGELOG.md entry."
+          echo
+          echo "Please either:"
+          echo "  1. Add an entry to CHANGELOG.md, or"
+          echo "  2. Include '$BYPASS_MESSAGE' in a commit message."
+          exit 1
+
+  validate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1, 2025-12-02
+
+      - name: Validate CHANGELOG.md is parseable
+        uses: coditory/changelog-parser@4f567c6914ee75eff434b4d946393dfd254f8f98 # v1.0.2, 2020-11-08
+        with:
+          path: CHANGELOG.md
